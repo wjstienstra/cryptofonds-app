@@ -4,7 +4,7 @@ import { useState } from "react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Upload, CheckCircle2 } from "lucide-react";
-import { Deposit, Holding, PortfolioData } from "@/types";
+import { Transaction, Holding, PortfolioData } from "@/types";
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -51,14 +51,21 @@ export function ExcelImport({ onDataLoaded }: ExcelImportProps) {
       const depositWs = wb.Sheets[depositSheetName];
       const rawDeposits = XLSX.utils.sheet_to_json(depositWs) as RawRow[];
 
-      const deposits: Deposit[] = rawDeposits.map((rawRow) => {
+      const transactions: Transaction[] = rawDeposits.map((rawRow) => {
         const row = normalizeRow(rawRow);
+
+        const rawType = String(row["type"] || "Deposit");
+        const type = (rawType.toLowerCase() === "opname" || rawType.toLowerCase() === "withdrawal") 
+          ? "withdrawal" 
+          : "deposit";
+
         return {
           id: generateId(),
-          date: String(row["datum"] || ""), 
-          name: String(row["naam"] || ""),
-          type: (String(row["type"] || "Deposit") === "Opname") ? "Withdrawal" : "Deposit",
+          user_id: String(row["naam"] || "unknown-user"),
+          date: String(row["datum"] || ""),
+          type: type,
           amount: Number(row["bedrag"] || 0),
+          description: String(row["opmerking"] || ""),
         };
       });
 
@@ -81,8 +88,8 @@ export function ExcelImport({ onDataLoaded }: ExcelImportProps) {
         });
       }
 
-      console.log("✅ Parsed Data:", { deposits, holdings });
-      onDataLoaded({ deposits, holdings });
+      console.log("✅ Parsed Data:", { transactions, holdings });
+      onDataLoaded({ transactions, holdings });
       setIsProcessed(true);
     };
   };

@@ -64,7 +64,7 @@ export default function PortfolioPage() {
           console.log("☁️ Loaded from Supabase:", dbAssets.length, "assets");
           
           const reconstructedData: PortfolioData = {
-            deposits: [], 
+            transactions: [], 
             holdings: dbAssets.map((asset) => ({
                symbol: asset.symbol,
                name: asset.name,
