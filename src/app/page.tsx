@@ -3,6 +3,7 @@ import { DollarSign, TrendingUp, Activity } from "lucide-react";
 // Import the new component
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { RecentActivity } from "@/components/recent-activity";
+import { HistoryChart } from "@/components/history-chart";
 
 export default function Home() {
   return (
@@ -61,6 +62,15 @@ export default function Home() {
           <CardContent>
              <RecentActivity />
           </CardContent>
+        </Card>
+
+        <Card className="col-span-4 mt-4">
+            <CardHeader>
+                <CardTitle>Portfolio Ontwikkeling</CardTitle>
+            </CardHeader>
+            <CardContent className="pl-2">
+                <HistoryChart />
+            </CardContent>
         </Card>
       </div>
     </div>

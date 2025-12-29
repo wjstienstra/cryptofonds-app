@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, FileSpreadsheet } from "lucide-react";
-import { PortfolioData, Holding, Transaction } from "@/types";
+import { PortfolioData, Holding, Transaction, HistoryRow } from "@/types";
 
 // Helper type for input rows where keys are unknown strings and values are unknown
 type RawRow = Record<string, unknown>;
@@ -78,8 +78,6 @@ export function ExcelImport({ onDataLoaded }: ExcelImportProps) {
         const depositSheetName = wb.SheetNames.find(n => n.toLowerCase().includes("storting")) || wb.SheetNames[0];
         const depositWs = wb.Sheets[depositSheetName];
         
-        // We implicitly cast the result to unknown[] first to avoid 'any'
-        // 'raw: true' ensures we get serial numbers for dates instead of formatted strings
         const rawDeposits = XLSX.utils.sheet_to_json<RawRow>(depositWs, { raw: true });
 
         const transactions: Transaction[] = rawDeposits.map((rawRow) => {
@@ -87,19 +85,14 @@ export function ExcelImport({ onDataLoaded }: ExcelImportProps) {
           
           const rawType = String(row["type"] || "deposit");
           const isWithdrawal = rawType.toLowerCase().includes("opname") || rawType.toLowerCase().includes("withdrawal");
-          
           const finalType = (isWithdrawal ? "withdrawal" : "deposit") as 'deposit' | 'withdrawal';
 
           return {
             id: generateId(),
             user_id: String(row["naam"] || row["name"] || "unknown-user"), 
-            
-            // We cast the value to the Union Type accepted by our parser
             date: parseExcelDate(row["datum"] as string | number | undefined), 
-
             type: finalType,
             amount: Number(row["bedrag"] || row["amount"] || 0),
-            description: String(row["opmerking"] || "")
           };
         }).filter(t => t.amount > 0);
 
@@ -121,20 +114,37 @@ export function ExcelImport({ onDataLoaded }: ExcelImportProps) {
             symbol: String(row["symbol"] || row["ticker"] || row["munt"] || "???").toUpperCase(),
             name: String(row["name"] || row["naam"] || ""),
             amount: Number(row["amount"] || row["aantal"] || 0),
-            // We try to read current price if present in Excel, otherwise undefined
             currentPrice: row["price"] ? Number(row["price"]) : undefined
           };
         }).filter(h => h.symbol !== "???" && h.amount > 0);
 
-        console.log(`✅ Import Success: ${transactions.length} transactions, ${holdings.length} holdings.`);
+
+        // --- 3. PARSE HISTORY (SNAPSHOTS) ---
+        // Look for "snapshots" or "history" tab
+        const historySheetName = wb.SheetNames.find(n => 
+            n.toLowerCase().includes("snapshot") || n.toLowerCase().includes("histor")
+        );
+
+        let history: HistoryRow[] = [];
+        
+        if (historySheetName) {
+            const historyWs = wb.Sheets[historySheetName];
+            // Read as raw to preserve column names like 'Willem_Value'
+            const rawHistory = XLSX.utils.sheet_to_json<RawRow>(historyWs, { raw: true });
+            
+            // Normalize keys (lowercase) so 'Willem_Value' becomes 'willem_value'
+            history = rawHistory.map(row => normalizeKeys(row) as unknown as HistoryRow);
+        }
+
+        console.log(`✅ Import Success: ${transactions.length} tx, ${holdings.length} holdings, ${history.length} snapshots.`);
         
         onDataLoaded({
             holdings,
-            transactions
+            transactions,
+            history // Passing the new data up!
         });
 
       } catch (error: unknown) {
-        // Safe error logging with type narrowing
         let errorMessage = "Unknown error parsing Excel";
         if (error instanceof Error) errorMessage = error.message;
         

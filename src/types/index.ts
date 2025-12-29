@@ -6,9 +6,7 @@ export interface Asset {
   amount: number;   // (bijv. 0.5)
 }
 
-// 2. HOLDING (Asset + Live Data)
-// Dit is de 'verrijkte' versie die we in de UI gebruiken.
-// Hij 'erft' alle eigenschappen van Asset (extends) en voegt prijsinfo toe.
+// 2. HOLDING (Komt overeen met tabel 'holdings')
 export interface Holding extends Asset {
   currentPrice?: number; // Optioneel, want komt pas na API call
   value?: number;        // Optioneel, want is berekend (amount * price)
@@ -31,13 +29,25 @@ export interface Transaction {
   date: string;     // ISO datum string (2023-01-01)
   type: 'deposit' | 'withdrawal'; // Kleine letters, zoals in DB
   amount: number;
-  description?: string; // Optioneel
 }
 
-// 5. DATA CONTAINER (Voor imports/exports)
+// NEW: Flexible interface for the wide Excel rows (Date, Willem_Value, Laura_Value...)
+export interface HistoryRow {
+  date: string | number; 
+  // Allow dynamic keys for users (e.g., 'value_willem')
+  [key: string]: string | number | undefined;
+}
+
 export interface PortfolioData {
-  // We gebruiken hier nog even de oude structuur voor de Excel import,
-  // maar we bereiden ons voor op de toekomst.
   holdings: Holding[];
-  transactions?: Transaction[]; // Nu nog optioneel
+  transactions: Transaction[];
+  history: HistoryRow[]; // <--- Added this field
+}
+
+export interface PortfolioSnapshot {
+  id: string;
+  created_at: string;
+  total_value: number;
+  total_invested: number;
+  user_id?: string;
 }
