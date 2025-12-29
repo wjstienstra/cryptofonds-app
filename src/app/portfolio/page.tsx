@@ -86,11 +86,25 @@ export default function PortfolioPage() {
   }, []);
 
   // --- 3. HANDLER: Sync to Supabase ---
+  // --- 3. HANDLER: Sync to Supabase ---
   const syncToDatabase = async () => {
-    if (!data || !data.holdings) return;
+    if (!data) return;
     setIsSaving(true);
     
     try {
+      // 1. Haal users op voor de koppeling (Naam -> ID)
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, full_name');
+      
+      if (profileError) throw profileError;
+
+      const nameToIdMap = new Map();
+      profiles?.forEach(p => {
+        if(p.full_name) nameToIdMap.set(p.full_name.toLowerCase().trim(), p.id);
+      });
+
+      // 2. Bereid Assets voor
       const uniqueHoldingsMap = new Map<string, { symbol: string, name: string, amount: number }>();
       data.holdings.forEach(h => {
         const key = h.symbol.toUpperCase().trim();
@@ -100,18 +114,53 @@ export default function PortfolioPage() {
           uniqueHoldingsMap.set(key, { symbol: key, name: h.name, amount: h.amount });
         }
       });
-      const dbRows = Array.from(uniqueHoldingsMap.values());
+      const dbAssets = Array.from(uniqueHoldingsMap.values());
 
-      const { error: deleteError } = await supabase.from('assets').delete().not('symbol', 'is', null); 
-      if (deleteError) throw deleteError;
+      // 3. Bereid Transacties voor
+      const dbTransactions = (data.transactions || []).map((t) => {
+        const matchedId = nameToIdMap.get(t.user_id.toLowerCase().trim());
 
-      const { error: insertError } = await supabase.from('assets').insert(dbRows);
-      if (insertError) throw insertError;
+        if (!matchedId) {
+          // Loggen als warning is wel handig voor jou als admin, maar geen alert
+          console.warn(`Skipping transaction: User '${t.user_id}' not found.`);
+          return null;
+        }
 
-      alert("✅ Database updated successfully.");
+        return {
+          user_id: matchedId,
+          date: t.date,
+          type: t.type,
+          amount: t.amount,
+          description: t.description
+        };
+      }).filter(t => t !== null);
+
+      // 4. Wipe & Replace
+      await supabase.from('assets').delete().not('symbol', 'is', null);
+      await supabase.from('transactions').delete().not('id', 'is', null);
+
+      if (dbAssets.length > 0) {
+        const { error } = await supabase.from('assets').insert(dbAssets);
+        if (error) throw error;
+      }
+
+      if (dbTransactions.length > 0) {
+        const { error } = await supabase.from('transactions').insert(dbTransactions);
+        if (error) throw error;
+      }
+
+      alert(`✅ Succesvol gesynchroniseerd!\n${dbAssets.length} assets en ${dbTransactions.length} transacties opgeslagen.`);
+      
     } catch (error: unknown) {
+      let errorMsg = "Er is een onbekende fout opgetreden.";
+
+      if (error instanceof Error) {
+        errorMsg = error.message;
+      }
+
       console.error("Sync Error:", error);
-      alert("Sync failed. Check console.");
+      alert(`Er ging iets mis: ${errorMsg}`);
+
     } finally {
       setIsSaving(false);
     }
